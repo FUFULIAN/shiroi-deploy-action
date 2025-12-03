@@ -167,7 +167,16 @@ jobs:
           port: ${{ secrets.PORT }}
           script: |
             set -e
-            source $HOME/.bashrc
+            # === 删除掉下面这三行 NVM 配置，它们是罪魁祸首 ===
+            # export NVM_DIR=~/.nvm
+            # source ~/.nvm/nvm.sh
+            # source $HOME/.bashrc 
+            
+            # 打印一下路径，确保心里有底
+            echo "当前 PATH: $PATH"
+            ls -l /usr/bin/npm
+            ls -l /usr/bin/pm2
+            
             basedir=$HOME/mx-space/shiro
             workdir=$basedir/${{ github.run_number }}
             mkdir -p $workdir
@@ -177,25 +186,31 @@ jobs:
             cd $workdir
             unzip -qq -o $workdir/release.zip
             rm -rf $workdir/standalone/.env
-            ln -s $HOME/shiro/.env $workdir/standalone/.env
-            export NEXT_SHARP_PATH=$(npm root -g)/sharp
-            # copy workdir ecosystem.config.js to basedir if not exists
+            ln -s $HOME/mx-space/shiro/.env $workdir/standalone/.env
+            
+            # 【关键修改1】直接用 /usr/bin/npm，不让它自己找
+            export NEXT_SHARP_PATH=$(/usr/bin/npm root -g)/sharp
+            
             if [ ! -f $basedir/ecosystem.config.js ]; then
               cp $workdir/standalone/ecosystem.config.js $basedir/ecosystem.config.js
             fi
-            # https://github.com/Unitech/pm2/issues/3054
-            # symlink workdir node entry file to basedir
+            
             ln -sf $workdir/standalone/server.js $basedir/server.js
             mkdir -p $workdir/standalone/.next
             rm -rf $workdir/standalone/.next/cache
+            
+            # 你的清理缓存逻辑
             echo "正在清除 Next.js ISR 缓存..."
             rm -rf $basedir/.cache
             mkdir -p $basedir/.cache
+            
             ln -sf $basedir/.cache $workdir/standalone/.next/cache
             cd $basedir
-            pm2 reload ecosystem.config.js --update-env
+            
+            # 【关键修改2】直接用 /usr/bin/pm2
+            /usr/bin/pm2 reload ecosystem.config.js --update-env
             rm $workdir/release.zip
-            pm2 save
+            /usr/bin/pm2 save
             echo "Deployed successfully"
 
       - name: After deploy script
