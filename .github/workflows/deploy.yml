@@ -166,6 +166,12 @@ jobs:
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
           script: |
+            # 1. 通过管道将密码传给 sudo -S，并启动一个 root 身份的 bash
+            # << 'EOF' 表示后续的内容直到 EOF 为止，都作为脚本在 root 环境下执行
+            echo "${{ secrets.PASSWORD }}" | sudo -S -i bash << 'EOF'
+            
+            # --- 从这里开始，所有的命令都是以 ROOT 身份运行的 ---
+            echo "Current user is: $(whoami)" # 这里应该输出 root
             set -e
             source $HOME/.bashrc
             basedir=$HOME/mx-space/shiro
