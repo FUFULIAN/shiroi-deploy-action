@@ -166,31 +166,58 @@ jobs:
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
           script: |
-            # 1. 通过管道将密码传给 sudo -S，并启动一个 root 身份的 bash
-            # << 'EOF' 表示后续的内容直到 EOF 为止，都作为脚本在 root 环境下执行
+            # 使用 sudo -S -i 切换 root，并立即开始执行 Here-Doc 块
             echo "${{ secrets.PASSWORD }}" | sudo -S -i bash << 'EOF'
             
-            # --- 从这里开始，所有的命令都是以 ROOT 身份运行的 ---
-            echo "Current user is: $(whoami)" # 这里应该输出 root
-            set -e
-            source $HOME/.bashrc
+            # =======================================================
+            # 关键修复步骤：手动加载环境变量
+            # =======================================================
+            # 1. 如果你是用 NVM 安装的 Node (最常见的情况)
+            export NVM_DIR="/root/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # 2. 如果你是用 fnm 或其他方式，或者上面没生效
+            # 尝试强制加载 .bashrc (忽略交互式检查)
+            # 这一步通常能解决大部分 "command not found"
+            set +e # 暂时允许失败，防止 source 报错中断脚本
+            source /root/.profile
+            source /root/.bashrc
+            set -e # 恢复遇到错误即停止
+
+            # 3. 调试信息：打印一下看看现在能不能找到 pm2
+            echo "当前用户: $(whoami)"
+            echo "PM2 路径: $(which pm2)"
+            node -v
+            # =======================================================
+
+            # --- 下面是你原来的逻辑 ---
             basedir=$HOME/mx-space/shiro
             workdir=$basedir/${{ github.run_number }}
             mkdir -p $workdir
             mkdir -p $basedir/.cache
+            
+            # 移动文件
             mv /tmp/shiro/release.zip $workdir/release.zip
             rm -r /tmp/shiro
+            
             cd $workdir
             unzip -qq -o $workdir/release.zip
             rm -rf $workdir/standalone/.env
-            ln -s $HOME/shiro/.env $workdir/standalone/.env
+            
+            # 处理 .env
+            if [ -f "$HOME/shiro/.env" ]; then
+              ln -s $HOME/shiro/.env $workdir/standalone/.env
+            else
+               echo "警告: 未找到 .env 文件"
+            fi
+            
+            # 这里的 npm 需要上面的环境变量加载成功才能运行
             export NEXT_SHARP_PATH=$(npm root -g)/sharp
-            # copy workdir ecosystem.config.js to basedir if not exists
+            
             if [ ! -f $basedir/ecosystem.config.js ]; then
               cp $workdir/standalone/ecosystem.config.js $basedir/ecosystem.config.js
             fi
-            # https://github.com/Unitech/pm2/issues/3054
-            # symlink workdir node entry file to basedir
+
             ln -sf $workdir/standalone/server.js $basedir/server.js
             mkdir -p $workdir/standalone/.next
             rm -rf $workdir/standalone/.next/cache
@@ -199,10 +226,15 @@ jobs:
             mkdir -p $basedir/.cache
             ln -sf $basedir/.cache $workdir/standalone/.next/cache
             cd $basedir
+            
+            # PM2 操作
             pm2 reload ecosystem.config.js --update-env
             rm $workdir/release.zip
             pm2 save
             echo "Deployed successfully"
+            
+            # 结束 Here-Doc，注意 EOF 前面不要有缩进，必须顶格(在脚本字符串的语义下)
+            EOF
 
       - name: After deploy script
         run: |
