@@ -221,9 +221,6 @@ jobs:
             ln -sf $workdir/standalone/server.js $basedir/server.js
             mkdir -p $workdir/standalone/.next
             rm -rf $workdir/standalone/.next/cache
-            echo "正在清除 Next.js ISR 缓存..."
-            rm -rf $basedir/.cache
-            mkdir -p $basedir/.cache
             ln -sf $basedir/.cache $workdir/standalone/.next/cache
             cd $basedir
             
